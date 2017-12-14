@@ -1,0 +1,495 @@
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+[RequireComponent(typeof(AudioSource))]                                         // Adding an audio souce component to whichever opject we atatch this scrip too.
+
+public class DynamicWeather : MonoBehaviour
+{
+    private Transform _player;                                                  // Player game object transform.
+    private Transform _weather;                                                 // Weather game object transform.
+    private Transform _wind;                                                    // Wind game object transfrom.
+
+    [Header ("Weather Settings")]
+    public float _weatherHeight = 15.0f;                                        // Defines height from ground of weather game object;
+
+    [Header ("Weather Text Variables")]
+    public Text _weatherStateText;                                              // Creates a slot in inspector to assign the weather text.
+    public Text _switchWeatherTimerText;                                        // Creates a slot in inspector to assign the weather timer text.
+
+    [Header ("Particle Variables")]
+    public ParticleSystem _sunCloudsParticleSystem;                             // Creates a slot in inspector to assign our sun clouds system.
+    public ParticleSystem _thunderStormParticleSystem;                          // Creates a slot in inspector to assign our thunder storm system.
+    public ParticleSystem _thunderStormCloudsParticleSystem;                    // Creates a slot in inspector to assign out thunder storm clouds.
+    public ParticleSystem _mistParticleSystem;                                  // Creates a slot in inspector to assign our mist system.
+    public ParticleSystem _overcastParticleSystem;                              // Creates a slot in inspector to assign our overcast system.
+    public ParticleSystem _snowParticleSystem;                                  // Creates a slot in inspector to assign our snpw system.
+
+    private ParticleSystem.EmissionModule _sunClouds;                           // Defines name convention for sun clouds emission module.
+    private ParticleSystem.EmissionModule _thunder;                             // Defines name convention for thunder storm emission module.
+    private ParticleSystem.EmissionModule _thunderClouds;                       // Defines name convention for thunder clouds emission module.
+    private ParticleSystem.EmissionModule _mist;                                // Defines name convention for mist clouds emission module.
+    private ParticleSystem.EmissionModule _overcast;                            // Defines name convention for overcast clouds emission module.
+    private ParticleSystem.EmissionModule _snow;                                // Defines name convention for snow clouds emission module.
+
+    [Header ("Timer Variables")]
+    public float _switchWeatherTimer = 0f;                                      // Switch weather timer equals 0.
+    public float _resetWeatherTimer;                                            // Defines variable for reset timer.
+    public float _randomWeatherMax;
+    public float _RandomWeatherMin;
+
+    [Header ("Skybox Variables")]
+    public float _skyboxBlendValue;                                             // Value that define our skybox blend.
+    public float _skyboxBlendTime = 0.25f;                                      // Rate at which the skybox blends.
+    private bool _sunnyState;                                                   // Defines if the sunny state is active.
+    private bool _thunderState;                                                 // Defines if the thunder state is active.
+    private bool _mistState;                                                    // Defines if the mist state is active.
+    private bool _overcastState;                                                // Defines if the overcast state is active.
+    private bool _snowState;                                                    // Defines if the snow state os active.
+
+    [Header ("Audio Variables")]
+    public float _audioFadeTime = 0.25f;                                        // Defines rate for audio fade.
+    public AudioClip _sunnyAudio;                                               // Creates a slot in inspector to assign our sunny audio clip.
+    public AudioClip _thunderStormAudio;                                        // Creates a slot in inspector to assing our thunder storm audio clip.
+    public AudioClip _mistAudio;                                                // Creates a slot in inspector to assign our mist audio clip.
+    public AudioClip _overcastAudio;                                            // Creates a slot in inspector to assign our overcast audio clip.
+    public AudioClip _snowAudio;                                                // Creates a slot in inspector to assign our snow audio clip.
+
+    [Header("Light Intensity Variables")]
+    private Light _sunLight;                                                    
+    public float _lightDimTime = 0.1f;                                          // Defines our rate for light dimming.
+    public float _thunderIntensity = 0f;                                        // Defines our minimum light intensity (Thunder)
+    public float _sunnyIntensity = 1f;                                          // Defines our maximum light intensity (Sunny)
+    public float _mistIntensity = 0.5f;                                         // Defines our mist light intensity.
+    public float _overcastIntesity = 0.25f;                                     // Defines our overcast light intensity.
+    public float _snowIntensity = 0.5f;                                         // Defines our snow light intensity.
+
+    [Header ("Fog Colour Variables")]
+    public Color _sunFog;                                                       // Creates slot in inspector to set sun fog colour.
+    public Color _thunderFog;                                                   // Creates slot in inspector to set thunder fog colour.
+    public Color _mistFog;                                                      // Creates slot in inspector to set mist fog colour.
+    public Color _overcastFog;                                                  // Creates slot in inspector to set overcast fog colour.
+    public Color _snowFog;                                                      // Creates slot in inspector to set snow fog colour.
+    public float _fogChangeSpeed = 0.1f;                                        // Defines speed for the fog change.
+
+    [Header ("Wind Variables")]
+    public float _windMain;                                                     // Defines wind main strength.
+    public float _windTurbulence;                                               // Defines wind turbulence strength.
+    public float _windPulseMagnitude;                                           // Defines wind pulse magnitude strength. 
+    public float _windPulseFequency;                                            // Defines wind pulse frequency strength.
+
+    [Header ("Weather States")]
+    public WeatherStates _weatherState;                                         // Defines the naming convention of our states.
+    private int _switchWeather;                                                 // Defines naming convention of our switch range.
+
+    public enum WeatherStates                                                   // Defines all states the weather can exist in.
+    {
+        PickWeather,
+        SunnyWeather,
+        ThunderWeather,
+        MistWeather,
+        OvercastWeather,
+        SnowWeather
+    }
+
+	// Use this for initialization
+	void Start ()
+    {
+        GameObject _playerGameObject = GameObject.FindGameObjectWithTag("Player"); // Find player game object.
+        _player = _playerGameObject.transform;                                     // Chaches player position.
+
+        GameObject _weatherGameObject = GameObject.FindGameObjectWithTag("Weather");
+        _weather = _weatherGameObject.transform;
+
+        GameObject _windGameObject = GameObject.FindGameObjectWithTag("Wind");
+        _wind = _windGameObject.transform;
+
+        _sunLight = GetComponent<Light>();                                      // Sun light variable is equal to our light.
+
+        RenderSettings.fog = true;                                              // Enable fog in render settings.
+        RenderSettings.fogMode = FogMode.ExponentialSquared;                    // Set fog mode to Exponential Squared.
+        RenderSettings.fogDensity = 0.01f;                                      // Set fog density.
+
+        RenderSettings.skybox.SetFloat("_Blend", 0);                            // Set skybox blend value to zero on start up.
+
+        _sunClouds      = _sunCloudsParticleSystem.emission;                        // _sunClouds is equal to _sunCloudsParticleSystem.
+        _thunder        = _thunderStormParticleSystem.emission;                     // _thunder is equal to _thunderStormParticleSystem.
+        _thunderClouds  = _thunderStormCloudsParticleSystem.emission;               // _thunderClouds is equal to _thunderStormCloudsParticleSystem.
+        _mist           = _mistParticleSystem.emission;                             // _mist is equal to _mistParticleSystem.
+        _overcast       = _overcastParticleSystem.emission;                         // _overcast is equal to _overcastParticleSystem.
+        _snow           = _snowParticleSystem.emission;                             // _snow is equal to _snowParticleSystem.
+
+        _weatherStateText.text = "Pick Weather";
+
+        StartCoroutine(WeatherFSM());                                           // Starting our state machine.
+	}
+	
+	// Update is called once per frame
+	void Update ()
+    {
+        SwitchWeatherTimer();                                                               // Updates our SwitchWeatherTimer function.
+
+        SkyboxBlendManager();                                                               // Start skybox blend function.
+
+        _switchWeatherTimerText.text = "Next Weather In: " + Mathf.RoundToInt (_switchWeatherTimer).ToString();   // Displaying the weather timer (Rounding to nearest int, and converting to string.
+
+        //_weather.transform.position = new Vector3(_player.position.x, _player.position.y + _weatherHeight, _player.position.z);
+	}
+
+    void SwitchWeatherTimer()
+    {
+        //Debug.Log("SwitchWeatherTimer");
+
+        _switchWeatherTimer -= Time.deltaTime;                                  // Decrease weather timer by real time.
+
+        if (_switchWeatherTimer < 0)                                            // If switch timer is less than 0
+            _switchWeatherTimer = 0;                                            // then switch timer is equal to 0.
+
+        if (_switchWeatherTimer > 0)                                            // If switch timer is greater than 0
+            return;                                                             // then do nothing and return.
+
+        if (_switchWeatherTimer == 0)                                           // If switch timer is equal to 0
+            _weatherState = DynamicWeather.WeatherStates.PickWeather;           // then switch our case block to PickWeather.
+
+        _resetWeatherTimer = Random.Range(_RandomWeatherMin, _randomWeatherMax);// _resetWeatherTimer is equal to a random range between two values.
+
+        _switchWeatherTimer = _resetWeatherTimer;                               // Switch timer is equal to reset time.
+    }
+
+    IEnumerator WeatherFSM()
+    {
+        while (true)                                                            // While the weather state machine is active.
+        {
+            switch (_weatherState)                                              // Switch the weather states.
+            {
+                case WeatherStates.PickWeather:
+                    PickWeather();
+                    break;
+                case WeatherStates.SunnyWeather:
+                    SunnyWeather();
+                    break;
+                case WeatherStates.ThunderWeather:
+                    ThunderWeather();
+                    break;
+                case WeatherStates.MistWeather:
+                    MistWeather();
+                    break;
+                case WeatherStates.OvercastWeather:
+                    OvercastWeather();
+                    break;
+                case WeatherStates.SnowWeather:
+                    SnowWeather();
+                    break;
+            }
+
+            yield return null;                      // Because we are not returning a numeric value (WeatherFSM)
+        }
+    }
+
+    void PickWeather()
+    {
+        //Debug.Log("Pick Weather");
+
+        _switchWeather = Random.Range(0, 5);        // _switchWeather is equal to a random range between (0, 5)
+
+        _sunClouds.enabled = false;                 // Disables our sun particle emission system.
+        _thunder.enabled = false;                   // Disables our thunder storm particle emission system.
+        _thunderClouds.enabled = false;             // Disables our thunder clouds particle emission system.
+        _mist.enabled = false;                      // Disables our mist particle emission system.
+        _overcast.enabled = false;                  // Disables our overcast particle emission system.
+        _snow.enabled = false;                      // Disables our snow particle emission system.
+
+        _sunnyState = false;                        // Set sunny state to false.
+        _thunderState = false;                      // Set thunder state to false.
+        _mistState = false;                         // Set mist state to false.
+        _overcastState = false;                     // Set overcast state to false.
+        _snowState = false;                         // Set snow state to false.
+
+        // Wind Rotataion.
+        float _tempRotation = Random.Range(0, 360); // _tempRotation is equal to a range between 0 - 360 degrees.
+
+        _weather.transform.localEulerAngles = new Vector3(0, _tempRotation, 0);     // Set the rotation of weather game object.
+        _wind.transform.localEulerAngles = new Vector3(0, _tempRotation, 0);        // Set the rotation of the wind game object.
+
+        float _tempWindMainStrength             = Random.Range(0.1f, 1f);
+        float _tempWindTurbulenceStrength       = Random.Range(0.1f, 1f);
+        float _tempWindPulseMagnitudeStrength   = Random.Range(0.1f, 0.5f);
+        float _tempWindPulseFrequencyStrength   = Random.Range(0.01f, 0.1f);
+
+        GameObject _windGameObject = GameObject.FindGameObjectWithTag("Wind");
+
+        _windMain = _windGameObject.GetComponent<WindZone>().windMain = _tempWindMainStrength;
+        _windTurbulence = _windGameObject.GetComponent<WindZone>().windTurbulence = _tempWindTurbulenceStrength;
+        _windPulseMagnitude = _windGameObject.GetComponent<WindZone>().windPulseMagnitude = _tempWindPulseMagnitudeStrength;
+        _windPulseFequency = _windGameObject.GetComponent<WindZone>().windPulseFrequency = _tempWindPulseFrequencyStrength;
+
+        switch (_switchWeather)
+        {
+            case 0:
+                _weatherState = DynamicWeather.WeatherStates.SunnyWeather;
+                break;
+            case 1:
+                _weatherState = DynamicWeather.WeatherStates.ThunderWeather;
+                break;
+            case 2:
+                _weatherState = DynamicWeather.WeatherStates.MistWeather;
+                break;
+            case 3:
+                _weatherState = DynamicWeather.WeatherStates.OvercastWeather;
+                break;
+            case 4:
+                _weatherState = DynamicWeather.WeatherStates.SnowWeather;
+                break;
+        }
+    }
+
+    void SunnyWeather()
+    {
+        //Debug.Log("SunnyWeather");
+        _weatherStateText.text = "Sunny";
+
+        _sunClouds.enabled = true;                                                  // Enable our sun clouds particle emission system.
+        _sunnyState = true;                                                         // Set sunny state to true.
+
+        ChangeLightIntensity(_sunnyIntensity);
+
+        ChangeAudioSouce(_sunnyAudio);
+
+        ChangeFogColour(_sunFog);
+    }
+
+    void ThunderWeather()
+    {
+        //Debug.Log("ThunderWeather");
+        _weatherStateText.text = "Thunder Storm";
+
+        _thunder.enabled = true;                                                    // Enable our thunder particle emission system.
+        _thunderClouds.enabled = true;                                              // Enable our thunder clouds emission system.
+        _thunderState = true;                                                       // Set thunder state to true.
+
+        ChangeLightIntensity(_thunderIntensity);
+
+        ChangeAudioSouce(_thunderStormAudio);
+
+        ChangeFogColour(_thunderFog);
+    }
+
+    void MistWeather()
+    {
+        //Debug.Log("MistWeather");
+        _weatherStateText.text = "Misty";
+
+        _mist.enabled = true;                                                       // Enable our mist particle emission system.
+        _mistState = true;                                                          // Set mist state to true.
+
+        ChangeLightIntensity(_mistIntensity);
+
+        ChangeAudioSouce(_mistAudio);
+
+        ChangeFogColour(_mistFog);
+    }
+
+    void OvercastWeather()
+    {
+        //Debug.Log("OvercastWeather");
+        _weatherStateText.text = "Overcast";
+
+        _overcast.enabled = true;                                                   // Enable our overcast particle emission system.
+        _overcastState = true;                                                      // Set overcast state to true.
+
+        ChangeLightIntensity(_overcastIntesity);
+
+        ChangeAudioSouce(_overcastAudio);
+
+        ChangeFogColour(_overcastFog);
+    }
+
+    void SnowWeather()
+    {
+        //Debug.Log("SnowWeather");
+        _weatherStateText.text = "Snowy";
+
+        _snow.enabled = true;                                                       // Enable our snow particle emission system.
+        _snowState = true;                                                          // Set snow state to true.
+        _sunClouds.enabled = true;
+
+        ChangeLightIntensity(_snowIntensity);
+
+        ChangeAudioSouce(_snowAudio);                                               // Calling in the ChangeAudioSource function, and passing in the _snowAudio clip.
+
+        ChangeFogColour(_snowFog);
+    }
+
+    void ChangeAudioSouce(AudioClip audioSource)
+    {
+        AudioSource _audioComp = GetComponent<AudioSource>();
+
+        if (_audioComp.volume > 0                                   // If the volume is greater than zero
+            && _audioComp.clip != audioSource)                      // and it does not equal the correct audio clip
+        {
+            _audioComp.volume -= Time.deltaTime * _audioFadeTime;   // Then reduce volume by the audio fade time.
+        }
+
+        if (_audioComp.volume == 0)                                 // If the audio clip from the previous weather state equals zero.
+        {
+            _audioComp.Stop();                                      // Then stop playing the audio clip.
+            _audioComp.clip = audioSource;                          // Then set the audio clip to the correct weather clip.
+            _audioComp.loop = true;                                 // Then set the clip to loop.
+            _audioComp.Play();                                      // Then play the correct audio clip.
+        }
+
+        if (_audioComp.volume < 1                                   // If the volume is less than one
+            && _audioComp.clip == audioSource)                      // and it does not equal the correct audio clip
+        {
+            _audioComp.volume += Time.deltaTime * _audioFadeTime;   // Then increase volume by the audio fade time.
+        }
+    }
+
+    void ChangeLightIntensity(float lightIntensity)
+    {
+        if (_sunLight.intensity == lightIntensity)                      // If our light is equal to the requiered intesity.
+            return;                                                     // then return and do nothing.
+
+        if (_sunLight.intensity > lightIntensity)                       // If the light intemsity is greater than our reqiered light intensity
+           _sunLight.intensity -= Time.deltaTime * _lightDimTime;       // then minus intensity by our light dim time.
+
+        if (_sunLight.intensity < lightIntensity)                       // If the light intensity is less than our reqiered light intensity
+            _sunLight.intensity += Time.deltaTime * _lightDimTime;      // then add intensity by our light dim time.
+    } 
+
+    void ChangeFogColour(Color fogColour)
+    {
+        Color _currentFogColour = RenderSettings.fogColor;                                                      // Current fog colour is equal to the render settings fog colour.
+
+        RenderSettings.fogColor = Color.Lerp(_currentFogColour, fogColour, _fogChangeSpeed * Time.deltaTime);   // Render settings fog equals (change from currect fog to requiered fog by fog change speed)
+    }
+
+    void SkyboxBlendManager()
+    {
+        //Debug.Log("Skybox Blend Manager");
+
+        if (_sunnyState == true)                                            // If sunny state is active.
+        {
+            if (_skyboxBlendValue == 0)                                     // If skybox blend value queals zero,
+            {
+                return;                                                     // Then do nothing and return.
+            }
+
+            _skyboxBlendValue -= _skyboxBlendTime * Time.deltaTime;         // Minus blend time from blend value.
+            
+            if ( _skyboxBlendValue < 0)                                     // If skybox blend value is less than zero.
+            {
+                _skyboxBlendValue = 0;                                      // Then make skybox blend value equal zero.
+            }
+
+            RenderSettings.skybox.SetFloat("_Blend", _skyboxBlendValue);    // Set skybox blend value to variable _skyboxBlendValue.
+        }
+
+        if (_thunderState == true)                                          // If thunder state is active.
+        {
+            if (_skyboxBlendValue == 1)                                     // If skybox blend value queals one,
+            {
+                return;                                                     // Then do nothing and return.
+            }
+
+            _skyboxBlendValue += _skyboxBlendTime * Time.deltaTime;         // Add blend time from blend value.
+
+            if (_skyboxBlendValue > 1)                                      // If skybox blend value is greater than one.
+            {
+                _skyboxBlendValue = 1;                                      // Then make skybox blend value equal one.
+            }
+
+            RenderSettings.skybox.SetFloat("_Blend", _skyboxBlendValue);    // Set skybox blend value to variable _skyboxBlendValue.
+        }
+
+        if (_mistState == true)                                             // If mist state is active.
+        {
+            if (_skyboxBlendValue == 0.25f)                                 // If skybox blend value queals 0.25f,
+            {
+                return;                                                     // Then do nothing and return.
+            }
+
+            if (_skyboxBlendValue < 0.25f)
+            {
+                _skyboxBlendValue += _skyboxBlendTime * Time.deltaTime;     // Add blend time from blend value.
+
+                if (_skyboxBlendValue > 0.25f)                              // If skybox blend value is less than 0.25f.
+                {
+                    _skyboxBlendValue = 0.25f;                              // Then make skybox blend value equal 0.25f.
+                }
+            }
+
+            if (_skyboxBlendValue > 0.25f)
+            {
+                _skyboxBlendValue -= _skyboxBlendTime * Time.deltaTime;     // Add blend time from blend value.
+
+                if (_skyboxBlendValue < 0.25f)                              // If skybox blend value is greater than 0.25f.
+                {
+                    _skyboxBlendValue = 0.25f;                              // Then make skybox blend value equal 0.25f.
+                }
+            }
+
+            RenderSettings.skybox.SetFloat("_Blend", _skyboxBlendValue);    // Set skybox blend value to variable _skyboxBlendValue.
+        }
+
+        if (_overcastState == true)                                         // If overcast state is active.
+        {
+            if (_skyboxBlendValue == 0.75f)                                 // If skybox blend value queals 0.75f,
+            {
+                return;                                                     // Then do nothing and return.
+            }
+
+            if (_skyboxBlendValue < 0.75f)
+            {
+                _skyboxBlendValue += _skyboxBlendTime * Time.deltaTime;     // Add blend time from blend value.
+
+                if (_skyboxBlendValue > 0.75f)                              // If skybox blend value is less than 0.75f.
+                {
+                    _skyboxBlendValue = 0.75f;                              // Then make skybox blend value equal 0.75f.
+                }
+            }
+
+            if (_skyboxBlendValue > 0.75f)
+            {
+                _skyboxBlendValue -= _skyboxBlendTime * Time.deltaTime;     // Add blend time from blend value.
+
+                if (_skyboxBlendValue < 0.75f)                              // If skybox blend value is greater than 0.75f.
+                {
+                    _skyboxBlendValue = 0.75f;                              // Then make skybox blend value equal 0.75f.
+                }
+            }
+
+            RenderSettings.skybox.SetFloat("_Blend", _skyboxBlendValue);    // Set skybox blend value to variable _skyboxBlendValue.
+        }
+
+        if (_snowState == true)                                             // If snow state is active.
+        {
+            if (_skyboxBlendValue == 0.5f)                                  // If skybox blend value queals 0.5f,
+            {
+                return;                                                     // Then do nothing and return.
+            }
+
+            if (_skyboxBlendValue < 0.5f)
+            {
+                _skyboxBlendValue += _skyboxBlendTime * Time.deltaTime;     // Add blend time from blend value.
+
+                if (_skyboxBlendValue > 0.5f)                               // If skybox blend value is less than 0.5f.
+                {
+                    _skyboxBlendValue = 0.5f;                               // Then make skybox blend value equal 0.5f.
+                }
+            }
+
+            if (_skyboxBlendValue > 0.5f)
+            {
+                _skyboxBlendValue -= _skyboxBlendTime * Time.deltaTime;     // Add blend time from blend value.
+
+                if (_skyboxBlendValue < 0.5f)                               // If skybox blend value is greater than 0.5f.
+                {
+                    _skyboxBlendValue = 0.5f;                               // Then make skybox blend value equal 0.5f.
+                }
+            }
+
+            RenderSettings.skybox.SetFloat("_Blend", _skyboxBlendValue);    // Set skybox blend value to variable _skyboxBlendValue.
+        }
+    }
+}
